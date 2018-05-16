@@ -1,90 +1,109 @@
 package com.example.android.inventoryapp_stage1;
 
+import android.app.LoaderManager;
+import android.content.ContentUris;
 import android.content.ContentValues;
+import android.content.CursorLoader;
+import android.content.Intent;
+import android.content.Loader;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
-import android.widget.TextView;
-
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.Button;
+import android.widget.ListView;
+import com.example.android.inventoryapp_stage1.data.StoreContract;
 import com.example.android.inventoryapp_stage1.data.StoreDbHelper;
-
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.COLUMN_PRODUCT_NAME;
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.COLUMN_PRICE;
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.COLUMN_QUANTITY;
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.COLUMN_SUPPLIER;
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.COLUMN_SUPPLIER_PHONE;
 import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry.TABLE_NAME;
-import static com.example.android.inventoryapp_stage1.data.StoreContract.StoreEntry._ID;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor> {
 
-    private StoreDbHelper mDbHelper;
+    /**
+     * Identifier for the pet data loader
+     */
+    private static final int STORE_LOADER = 0;
+
+    /**
+     * Adapter for the ListView
+     */
+    StoreCursorAdapter mCursorAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mDbHelper = new StoreDbHelper(this);
-    }
 
-    /*
-Start activity and call insertData to populate database with one result
-     */
-    @Override
-    protected void onStart() {
-        super.onStart();
-        insertData();
-        displayDatabaseInfo();
-    }
-
-    /**
-     * Temporary helper method to display information in the onscreen TextView about the state of
-     * the catalogue database.
-     */
-    private void displayDatabaseInfo() {
-        StoreDbHelper mDbHelper = new StoreDbHelper(this);
-        SQLiteDatabase db = mDbHelper.getReadableDatabase();
-        String[] tableColumns = new String[]{_ID, COLUMN_PRODUCT_NAME, COLUMN_PRICE};
-        Cursor cursor = db.query(TABLE_NAME, tableColumns, null, null, null, null, null);
-        TextView displayView = findViewById(R.id.text_cursor);
-
-        try {
-            displayView.setText("The catalogue table contains " + cursor.getCount() + " books.\n\n");
-            displayView.append(_ID + " - " + COLUMN_PRODUCT_NAME + " - " + COLUMN_PRICE + "\n");
-            // Figure out the index of each column
-            int idColumnIndex = cursor.getColumnIndex(_ID);
-            int nameColumnIndex = cursor.getColumnIndex(COLUMN_PRODUCT_NAME);
-            int priceColumnIndex = cursor.getColumnIndex(COLUMN_PRICE);
-            //Position cursor
-            while (cursor.moveToNext()) {
-                int currentID = cursor.getInt(idColumnIndex);
-                String currentName = cursor.getString(nameColumnIndex);
-                int currentPrice = cursor.getInt(priceColumnIndex);
-                displayView.append(("\n" + currentID + " - " + currentName + " - " + currentPrice));
+        // Setup FAB to open EditorActivity
+        Button addBook = (Button) findViewById(R.id.button_add_a_book);
+        addBook.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MainActivity.this, EditorActivity.class);
+                startActivity(intent);
             }
-        } finally {
-            cursor.close();
-        }
+        });
+
+        ListView storeListView = (ListView) findViewById(R.id.list);
+
+        // Find and set empty view on the ListView, so that it only shows when the list has 0 items.
+        View emptyView = findViewById(R.id.text_empty_view);
+        storeListView.setEmptyView(emptyView);
+
+        mCursorAdapter = new StoreCursorAdapter(this, null);
+        storeListView.setAdapter(mCursorAdapter);
+
+        storeListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                Intent intent = new Intent(MainActivity.this, ItemActivity.class);
+                Uri currentBookUri = ContentUris.withAppendedId(StoreContract.StoreEntry.CONTENT_URI, id);
+
+                // Set the URI on the data field of the intent
+                intent.setData(currentBookUri);
+
+                // Launch the {@link EditorActivity} to display the data for the current pet.
+                startActivity(intent);
+            }
+        });
+
+        // Kick off the loader
+        getLoaderManager().initLoader(STORE_LOADER, null, this);
     }
 
-    /*
-    This method starts to populate the database
-     */
-    private void insertData() {
 
-        StoreDbHelper mDbHelper = new StoreDbHelper(this);
-        SQLiteDatabase db = mDbHelper.getWritableDatabase();
-        //Values for db
-        ContentValues values = new ContentValues();
-        values.put(COLUMN_PRODUCT_NAME, "Book1");
-        values.put(COLUMN_PRICE, "5");
-        values.put(COLUMN_QUANTITY, "10");
-        values.put(COLUMN_SUPPLIER, "Supplier1");
-        values.put(COLUMN_SUPPLIER_PHONE, "P:0123456789");
-        //Db insert
-        long newRowId = db.insert(TABLE_NAME, null, values);
-        Log.v("Catalog Activity", "new row editor" + newRowId);
+    @Override
+    public Loader<Cursor> onCreateLoader(int i, Bundle bundle) {
+        // Define a projection that specifies the columns from the table we care about.
+        String[] projection = {StoreContract.StoreEntry._ID, StoreContract.StoreEntry.COLUMN_PRODUCT_NAME, StoreContract.StoreEntry.COLUMN_PRICE, StoreContract.StoreEntry.COLUMN_QUANTITY};
+
+        // This loader will execute the ContentProvider's query method on a background thread
+        return new CursorLoader(this,   // Parent activity context
+                StoreContract.StoreEntry.CONTENT_URI,   // Provider content URI to query
+                projection,             // Columns to include in the resulting Cursor
+                null,                   // No selection clause
+                null,                   // No selection arguments
+                null);                  // Default sort order
+    }
+
+    @Override
+    public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+        // Update {@link StoreCursorAdapter} with this new cursor containing updated pet data
+        mCursorAdapter.swapCursor(data);
+    }
+
+    @Override
+    public void onLoaderReset(Loader<Cursor> loader) {
+        // Callback called when the data needs to be deleted
+        mCursorAdapter.swapCursor(null);
     }
 }
+

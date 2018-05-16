@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">InventoryApp_stage1</string>
+    <string name="app_name">Bookland</string>
+    <string name="text_button">Add a book</string>
+    <string name="button_sale">Sale</string>
+    <string name="currency">EUR</string>
+    <string name="instock">Stock:</string>
 </resources>
